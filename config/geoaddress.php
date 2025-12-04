@@ -29,11 +29,12 @@ return [
     |--------------------------------------------------------------------------
     |
     | If the primary provider fails (API down, rate limited, etc.), the system
-    | will automatically try this fallback provider. Set to null to disable.
+    | will automatically try this fallback provider. Disabled by default.
+    | To enable, set GEOADDRESS_FALLBACK_PROVIDER in your .env file.
     | Supported: "google", "nominatim", "mapbox", null
     |
     */
-    'fallback_provider' => env('GEOADDRESS_FALLBACK_PROVIDER', 'nominatim'),
+    'fallback_provider' => env('GEOADDRESS_FALLBACK_PROVIDER'),
 
     /*
     |--------------------------------------------------------------------------
