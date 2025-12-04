@@ -32,15 +32,17 @@ class GeoaddressServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        // Publish config
-        $this->publishes([
-            __DIR__.'/../config/geoaddress.php' => config_path('geoaddress.php'),
-        ], 'geoaddress-config');
+        if ($this->app->runningInConsole()) {
+            // Publish config
+            $this->publishes([
+                __DIR__.'/../config/geoaddress.php' => config_path('geoaddress.php'),
+            ], 'geoaddress-config');
 
-        // Publish migrations
-        $this->publishes([
-            __DIR__.'/../database/migrations/' => database_path('migrations'),
-        ], 'geoaddress-migrations');
+            // Publish migrations
+            $this->publishes([
+                __DIR__.'/../database/migrations/' => database_path('migrations'),
+            ], 'geoaddress-migrations');
+        }
 
         // Load migrations
         $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
