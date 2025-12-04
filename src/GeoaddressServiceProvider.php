@@ -3,6 +3,7 @@
 namespace Multek\LaravelGeoaddress;
 
 use Illuminate\Support\ServiceProvider;
+use Multek\LaravelGeoaddress\Console\Commands\InstallCommand;
 use Multek\LaravelGeoaddress\Contracts\GeocoderInterface;
 use Multek\LaravelGeoaddress\Models\Address;
 use Multek\LaravelGeoaddress\Observers\AddressObserver;
@@ -15,13 +16,10 @@ class GeoaddressServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        // Merge config
         $this->mergeConfigFrom(__DIR__.'/../config/geoaddress.php', 'geoaddress');
 
-        // Register geocoder factory
         $this->app->singleton(GeocoderFactory::class);
 
-        // Bind geocoder interface to configured provider
         $this->app->bind(GeocoderInterface::class, function ($app) {
             return $app->make(GeocoderFactory::class)->make();
         });
@@ -32,22 +30,37 @@ class GeoaddressServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        $this->publishConfig();
+        $this->publishMigrations();
+        $this->registerCommands();
+        $this->registerObserver();
+    }
+
+    protected function publishConfig(): void
+    {
+        $this->publishes([
+            __DIR__.'/../config/geoaddress.php' => config_path('geoaddress.php'),
+        ], 'geoaddress-config');
+    }
+
+    protected function publishMigrations(): void
+    {
+        $this->publishesMigrations([
+            __DIR__.'/../database/migrations' => database_path('migrations'),
+        ], 'geoaddress-migrations');
+    }
+
+    protected function registerCommands(): void
+    {
         if ($this->app->runningInConsole()) {
-            // Publish config
-            $this->publishes([
-                __DIR__.'/../config/geoaddress.php' => config_path('geoaddress.php'),
-            ], 'geoaddress-config');
-
-            // Publish migrations
-            $this->publishes([
-                __DIR__.'/../database/migrations/' => database_path('migrations'),
-            ], 'geoaddress-migrations');
+            $this->commands([
+                InstallCommand::class,
+            ]);
         }
+    }
 
-        // Load migrations
-        $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
-
-        // Register observer
+    protected function registerObserver(): void
+    {
         Address::observe(AddressObserver::class);
     }
 }

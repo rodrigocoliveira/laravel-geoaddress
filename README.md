@@ -20,7 +20,9 @@ Production-ready polymorphic address system with automatic geocoding, PostGIS ge
 
 - PHP 8.2+
 - Laravel 11.0+
-- PostgreSQL with PostGIS extension (for geographic queries)
+- **PostgreSQL with PostGIS extension** (required)
+
+> **Note:** This package is designed exclusively for PostgreSQL with PostGIS. It uses PostGIS geography types for storing coordinates and spatial indexing, enabling powerful geographic queries like radius searches. MySQL and SQLite are not supported.
 
 ## Installation
 
@@ -28,9 +30,28 @@ Production-ready polymorphic address system with automatic geocoding, PostGIS ge
 composer require multek/laravel-geoaddress
 ```
 
-### Publish Configuration & Migrations
+### Quick Install
+
+The easiest way to install is using the install command:
 
 ```bash
+php artisan geoaddress:install
+```
+
+This will:
+1. Check and enable PostGIS extension if needed
+2. Publish the configuration file
+3. Publish and run migrations
+
+### Manual Installation
+
+If you prefer to install manually:
+
+```bash
+# Enable PostGIS (if not already enabled)
+psql -d your_database -c "CREATE EXTENSION IF NOT EXISTS postgis;"
+
+# Publish config and migrations
 php artisan vendor:publish --tag=geoaddress-config
 php artisan vendor:publish --tag=geoaddress-migrations
 php artisan migrate
@@ -55,12 +76,6 @@ MAPBOX_ACCESS_TOKEN=your-access-token
 # Queue settings (optional)
 GEOADDRESS_QUEUE_CONNECTION=redis
 GEOADDRESS_QUEUE_NAME=geocoding
-```
-
-### Optional: PostGIS Setup (PostgreSQL)
-
-```sql
-CREATE EXTENSION IF NOT EXISTS postgis;
 ```
 
 ## Usage
