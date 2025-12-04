@@ -25,6 +25,18 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Fallback Provider
+    |--------------------------------------------------------------------------
+    |
+    | If the primary provider fails (API down, rate limited, etc.), the system
+    | will automatically try this fallback provider. Set to null to disable.
+    | Supported: "google", "nominatim", "mapbox", null
+    |
+    */
+    'fallback_provider' => env('GEOADDRESS_FALLBACK_PROVIDER', 'nominatim'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Request Timeout
     |--------------------------------------------------------------------------
     |
