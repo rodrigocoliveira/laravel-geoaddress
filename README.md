@@ -63,6 +63,9 @@ php artisan migrate
 # Geocoding Provider: google, nominatim, mapbox
 GEOADDRESS_PROVIDER=google
 
+# Fallback Provider (optional) - used if primary fails
+GEOADDRESS_FALLBACK_PROVIDER=nominatim
+
 # Google Maps (if using google provider)
 GOOGLE_MAPS_API_KEY=your-api-key-here
 
@@ -77,6 +80,8 @@ MAPBOX_ACCESS_TOKEN=your-access-token
 GEOADDRESS_QUEUE_CONNECTION=redis
 GEOADDRESS_QUEUE_NAME=geocoding
 ```
+
+> **Tip:** For production, we recommend using Google Maps as primary provider and Nominatim as fallback. Google is more accurate, especially for Brazilian addresses, while Nominatim provides free fallback if Google is unavailable.
 
 ## Usage
 
@@ -203,12 +208,33 @@ When `geocoding_enabled = true`:
 - Coordinates provided? YES = "Trust me" - use them, skip API call
 - Coordinates provided? NO = "Figure it out" - dispatch geocoding job
 
-## Switching Geocoding Providers
+## Geocoding Providers
+
+### Available Providers
+
+| Provider | Pros | Cons |
+|----------|------|------|
+| **Google Maps** | Most accurate, great for Brazil | Requires API key, costs money |
+| **Nominatim** | Free, no API key needed | Less accurate, rate limited (1 req/sec) |
+| **Mapbox** | Good accuracy, generous free tier | Requires access token |
+
+### Fallback Provider
+
+If the primary provider fails (API down, rate limited, etc.), the system can automatically try a fallback provider:
+
+```env
+GEOADDRESS_PROVIDER=google
+GEOADDRESS_FALLBACK_PROVIDER=nominatim
+```
+
+### Custom Providers
 
 ```php
 use Multek\LaravelGeoaddress\Services\GeocoderFactory;
 
 $factory = app(GeocoderFactory::class);
+
+// Use a specific provider
 $nominatim = $factory->make('nominatim');
 $google = $factory->make('google');
 $mapbox = $factory->make('mapbox');
