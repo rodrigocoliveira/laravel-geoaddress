@@ -40,9 +40,10 @@ class NominatimGeocoder implements GeocoderInterface
                     'User-Agent' => $this->userAgent,
                 ])
                 ->get($this->baseUrl.'/search', [
-                    'q' => $address->formatted_address,
+                    'q' => $this->formatAddressForNominatim($address),
                     'format' => 'json',
                     'limit' => 1,
+                    'countrycodes' => strtolower($address->country_code ?? 'br'),
                 ]);
 
             if ($response->failed()) {
@@ -80,5 +81,44 @@ class NominatimGeocoder implements GeocoderInterface
 
             return null;
         }
+    }
+
+    /**
+     * Format address for Nominatim (simpler format works better).
+     */
+    protected function formatAddressForNominatim(Address $address): string
+    {
+        $parts = [];
+
+        // Street and number
+        if ($address->street) {
+            $streetPart = $address->street;
+            if ($address->number) {
+                $streetPart .= ', '.$address->number;
+            }
+            $parts[] = $streetPart;
+        }
+
+        // Neighbourhood
+        if ($address->neighbourhood) {
+            $parts[] = $address->neighbourhood;
+        }
+
+        // City
+        if ($address->city) {
+            $parts[] = $address->city;
+        }
+
+        // State
+        if ($address->state) {
+            $parts[] = $address->state;
+        }
+
+        // Postal code (without CEP prefix)
+        if ($address->postal_code) {
+            $parts[] = preg_replace('/[^0-9-]/', '', $address->postal_code);
+        }
+
+        return implode(', ', array_filter($parts));
     }
 }
