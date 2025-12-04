@@ -3,7 +3,6 @@
 namespace Multek\LaravelGeoaddress\Jobs;
 
 use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
@@ -28,7 +27,7 @@ use Multek\LaravelGeoaddress\Models\Address;
  * Usage:
  * GeocodeAddress::dispatch($address->id);
  */
-class GeocodeAddress implements ShouldBeUnique, ShouldQueue
+class GeocodeAddress implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
@@ -53,24 +52,8 @@ class GeocodeAddress implements ShouldBeUnique, ShouldQueue
     public function __construct(
         public int $addressId
     ) {
-        $this->onQueue(config('geoaddress.queue.name', 'default'));
-        $this->onConnection(config('geoaddress.queue.connection', config('queue.default')));
+        //
     }
-
-    /**
-     * Get the unique ID for the job.
-     *
-     * Prevents multiple jobs for the same address from being queued.
-     */
-    public function uniqueId(): string
-    {
-        return 'geocode-address-'.$this->addressId;
-    }
-
-    /**
-     * How long the unique lock should be held (seconds).
-     */
-    public int $uniqueFor = 3600; // 1 hour
 
     /**
      * Execute the job.

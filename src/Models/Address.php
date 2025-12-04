@@ -59,9 +59,20 @@ class Address extends Model
     public bool $coordinatesProvidedInRequest = false;
 
     /**
+     * The model's default values for attributes.
+     */
+    protected $attributes = [
+        'geocoding_enabled' => true,
+        'is_primary' => false,
+        'country_code' => 'BR',
+    ];
+
+    /**
      * The attributes that are mass assignable.
      */
     protected $fillable = [
+        'addressable_type',
+        'addressable_id',
         'type',
         'nickname',
         'is_primary',
@@ -83,6 +94,11 @@ class Address extends Model
         'metadata',
         'latitude',
         'longitude',
+        // Geocoding result fields (set by GeocodeAddress job)
+        'coordinates',
+        'geocoded_at',
+        'geocoding_failed_at',
+        'geocoding_error',
     ];
 
     /**
@@ -99,30 +115,28 @@ class Address extends Model
                 // Mark that coordinates were provided (for observer)
                 $address->coordinatesProvidedInRequest = true;
 
-                // If geocoding is disabled, don't store coordinates
-                if (! $address->geocoding_enabled) {
-                    unset($address->attributes['latitude']);
-                    unset($address->attributes['longitude']);
-
-                    return;
-                }
-
-                // Create Point from lat/lng
                 $lat = $address->attributes['latitude'];
                 $lng = $address->attributes['longitude'];
-                $address->attributes['coordinates'] = new Point($lat, $lng, 4326);
 
                 // Remove lat/lng from attributes as they're not actual columns
                 unset($address->attributes['latitude']);
                 unset($address->attributes['longitude']);
+
+                // If geocoding is disabled, don't store coordinates
+                if (! $address->geocoding_enabled) {
+                    return;
+                }
+
+                // Create Point from lat/lng using the proper setter (respects cast)
+                $address->coordinates = new Point($lat, $lng, 4326);
             }
 
             // If geocoding is disabled, ensure coordinates are always null
             if (! $address->geocoding_enabled) {
-                $address->attributes['coordinates'] = null;
-                $address->attributes['geocoded_at'] = null;
-                $address->attributes['geocoding_failed_at'] = null;
-                $address->attributes['geocoding_error'] = null;
+                $address->coordinates = null;
+                $address->geocoded_at = null;
+                $address->geocoding_failed_at = null;
+                $address->geocoding_error = null;
             }
         });
     }

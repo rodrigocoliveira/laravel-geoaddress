@@ -33,7 +33,8 @@ class AddressObserver
         }
 
         // If coordinates were provided in the request ("trust me" signal)
-        if ($address->coordinatesProvidedInRequest && $address->coordinates !== null) {
+        // We check the flag set by the saving hook, and verify coords exist in raw attributes
+        if ($address->coordinatesProvidedInRequest && $address->getRawOriginal('coordinates') !== null) {
             // Mark as geocoded (coords came from trusted source)
             $address->updateQuietly(['geocoded_at' => now()]);
 
@@ -88,9 +89,10 @@ class AddressObserver
         }
 
         // If coordinates were provided in this update ("trust me" signal)
-        if ($address->coordinatesProvidedInRequest && $address->coordinates !== null) {
+        // We check the flag set by the saving hook, and verify coords exist in raw attributes
+        if ($address->coordinatesProvidedInRequest && $address->getRawOriginal('coordinates') !== null) {
             // Update geocoded_at timestamp if not already set
-            if ($address->geocoded_at === null) {
+            if ($address->getRawOriginal('geocoded_at') === null) {
                 $address->updateQuietly(['geocoded_at' => now()]);
             }
 
@@ -102,6 +104,13 @@ class AddressObserver
 
         // If address fields changed and now needs geocoding
         if ($address->wasChanged(Address::ADDRESS_FIELDS) && $address->needsGeocoding()) {
+            GeocodeAddress::dispatch($address->id);
+
+            return;
+        }
+
+        // If geocoding was just enabled (billing -> delivery conversion) and needs geocoding
+        if ($address->wasChanged('geocoding_enabled') && $address->geocoding_enabled && $address->needsGeocoding()) {
             GeocodeAddress::dispatch($address->id);
         }
     }
