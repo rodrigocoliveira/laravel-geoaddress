@@ -16,7 +16,7 @@
         "matanyadaev/laravel-eloquent-spatial": "^4.0"
     },
     "require-dev": {
-        "orchestra/testbench": "^9.0",
+        "orchestra/testbench": "^9.0|^10.0",
         "pestphp/pest": "^3.0",
         "spatie/geocoder": "^3.0"
     },
