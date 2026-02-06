@@ -57,7 +57,7 @@ class Address extends Model
      * Track if coordinates were provided in the current request.
      * Used by observer to detect "trust me" signal.
      */
-    public bool $coordinatesProvidedInRequest = false;
+    public bool $trustProvidedCoordinates = false;
 
     /**
      * The model's default values for attributes.
@@ -114,7 +114,7 @@ class Address extends Model
 
             if ($latProvided && $lngProvided) {
                 // Mark that coordinates were provided (for observer)
-                $address->coordinatesProvidedInRequest = true;
+                $address->trustProvidedCoordinates = true;
 
                 $lat = $address->attributes['latitude'];
                 $lng = $address->attributes['longitude'];

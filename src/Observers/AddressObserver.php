@@ -33,7 +33,7 @@ class AddressObserver
         }
 
         // If coordinates were provided in the request ("trust me" signal)
-        if ($address->coordinatesProvidedInRequest) {
+        if ($address->trustProvidedCoordinates) {
             // Mark as geocoded if coords were actually stored (PostgreSQL)
             if ($address->getRawOriginal('coordinates') !== null) {
                 $address->updateQuietly(['geocoded_at' => now()]);
@@ -67,7 +67,7 @@ class AddressObserver
         }
 
         // Check if address fields changed AND no new coordinates provided
-        if ($address->addressFieldsChanged() && ! $address->coordinatesProvidedInRequest) {
+        if ($address->addressFieldsChanged() && ! $address->trustProvidedCoordinates) {
             // Address changed but no new coords - need to re-geocode
             // Clear old geocoding data
             $address->coordinates = null;
@@ -88,7 +88,7 @@ class AddressObserver
         }
 
         // If coordinates were provided in this update ("trust me" signal)
-        if ($address->coordinatesProvidedInRequest) {
+        if ($address->trustProvidedCoordinates) {
             // Mark as geocoded and dispatch event if coords were actually stored (PostgreSQL)
             if ($address->getRawOriginal('coordinates') !== null) {
                 if ($address->getRawOriginal('geocoded_at') === null) {
@@ -127,6 +127,6 @@ class AddressObserver
         }
 
         // Reset the request flag after save completes
-        $address->coordinatesProvidedInRequest = false;
+        $address->trustProvidedCoordinates = false;
     }
 }
