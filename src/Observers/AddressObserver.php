@@ -33,13 +33,12 @@ class AddressObserver
         }
 
         // If coordinates were provided in the request ("trust me" signal)
-        // We check the flag set by the saving hook, and verify coords exist in raw attributes
-        if ($address->coordinatesProvidedInRequest && $address->getRawOriginal('coordinates') !== null) {
-            // Mark as geocoded (coords came from trusted source)
-            $address->updateQuietly(['geocoded_at' => now()]);
-
-            // Dispatch event
-            AddressGeocoded::dispatch($address->fresh());
+        if ($address->coordinatesProvidedInRequest) {
+            // Mark as geocoded if coords were actually stored (PostgreSQL)
+            if ($address->getRawOriginal('coordinates') !== null) {
+                $address->updateQuietly(['geocoded_at' => now()]);
+                AddressGeocoded::dispatch($address->fresh());
+            }
 
             return;
         }
@@ -89,17 +88,16 @@ class AddressObserver
         }
 
         // If coordinates were provided in this update ("trust me" signal)
-        // We check the flag set by the saving hook, and verify coords exist in raw attributes
-        if ($address->coordinatesProvidedInRequest && $address->getRawOriginal('coordinates') !== null) {
-            // Update geocoded_at timestamp if not already set
-            if ($address->getRawOriginal('geocoded_at') === null) {
-                $address->updateQuietly(['geocoded_at' => now()]);
+        if ($address->coordinatesProvidedInRequest) {
+            // Mark as geocoded and dispatch event if coords were actually stored (PostgreSQL)
+            if ($address->getRawOriginal('coordinates') !== null) {
+                if ($address->getRawOriginal('geocoded_at') === null) {
+                    $address->updateQuietly(['geocoded_at' => now()]);
+                }
+                AddressGeocoded::dispatch($address->fresh());
             }
 
-            // Dispatch event
-            AddressGeocoded::dispatch($address->fresh());
-
-            return;
+            return; // Skip geocoding job regardless
         }
 
         // If address fields changed and now needs geocoding

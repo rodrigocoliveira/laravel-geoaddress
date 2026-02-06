@@ -30,7 +30,8 @@
     },
     "autoload-dev": {
         "psr-4": {
-            "Multek\\LaravelGeoaddress\\Tests\\": "tests/"
+            "Multek\\LaravelGeoaddress\\Tests\\": "tests/",
+            "Multek\\LaravelGeoaddress\\Database\\Factories\\": "database/factories/"
         }
     },
     "extra": {

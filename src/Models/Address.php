@@ -5,6 +5,7 @@ namespace Multek\LaravelGeoaddress\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
+use Illuminate\Support\Facades\DB;
 use MatanYadaev\EloquentSpatial\Objects\Point;
 use MatanYadaev\EloquentSpatial\Traits\HasSpatial;
 use Multek\LaravelGeoaddress\Database\Factories\AddressFactory;
@@ -127,8 +128,10 @@ class Address extends Model
                     return;
                 }
 
-                // Create Point from lat/lng using the proper setter (respects cast)
-                $address->coordinates = new Point($lat, $lng, 4326);
+                // Create Point from lat/lng (only on PostgreSQL; SQLite lacks spatial functions)
+                $isPostgres = DB::connection()->getDriverName() === 'pgsql';
+                $address->coordinates = $isPostgres ? new Point($lat, $lng, 4326) : null;
+                $address->geocoded_at = now();
             }
 
             // If geocoding is disabled, ensure coordinates are always null
