@@ -194,19 +194,75 @@ Event::listen(AddressGeocoded::class, function ($event) {
 
 ## Geocoding Design Philosophy
 
-The geocoding system uses a two-layer approach:
+The geocoding system uses a two-layer approach to decide when and how coordinates are set.
 
-### Layer 1: Address Type Capability (Persistent Field)
+### Layer 1: `geocoding_enabled` (Persistent — stored in DB)
 
-- `geocoding_enabled = true` (default) - Physical addresses that SHOULD have coordinates
-- `geocoding_enabled = false` - Non-physical addresses (billing, PO Box) - coordinates are ALWAYS null
+Controls whether an address **should ever have coordinates**.
 
-### Layer 2: Smart Detection (Per Request)
+| Value | Meaning | Example |
+|-------|---------|---------|
+| `true` (default) | Physical address — should have coordinates | delivery, home, work |
+| `false` | Non-physical address — coordinates are **always null** | billing, PO Box, virtual |
 
-When `geocoding_enabled = true`:
+When `geocoding_enabled` is `false`, the system **actively clears** coordinates, `geocoded_at`, and any geocoding error data on every save. This is enforced both in the model's `saving` callback and in the observer's `updating` event.
 
-- Coordinates provided? YES = "Trust me" - use them, skip API call
-- Coordinates provided? NO = "Figure it out" - dispatch geocoding job
+### Layer 2: `trustProvidedCoordinates` (Transient — per request only)
+
+Controls whether the system **should call a geocoding API** or trust what was provided. This flag is set automatically when you pass `latitude` and `longitude` in the address data — you never set it manually.
+
+| Scenario | Flag | What happens |
+|----------|------|--------------|
+| `addAddress()` without lat/lng | `false` | Geocoding job is dispatched |
+| `addAddress()` with lat/lng | `true` | Coordinates are used directly, **no API call** |
+| `update()` changes address fields, no lat/lng | `false` | Old coordinates are cleared, new geocoding job dispatched |
+| `update()` changes address fields, with lat/lng | `true` | New coordinates are used directly, **no API call** |
+| `update()` changes non-address fields (notes, metadata) | `false` | Nothing happens — existing coordinates are preserved |
+
+### Lifecycle: Converting Address Types
+
+When you change `geocoding_enabled` on an existing address:
+
+**Billing to Delivery** (`false` → `true`):
+```php
+$address->update(['geocoding_enabled' => true, 'type' => 'delivery']);
+// → Geocoding job is dispatched (address now needs coordinates)
+
+// Or, if you already have coordinates:
+$address->update([
+    'geocoding_enabled' => true,
+    'type' => 'delivery',
+    'latitude' => -23.561414,
+    'longitude' => -46.656689,
+]);
+// → Coordinates are stored directly, no API call
+```
+
+**Delivery to Billing** (`true` → `false`):
+```php
+$address->update(['geocoding_enabled' => false, 'type' => 'billing']);
+// → Coordinates, geocoded_at, and geocoding errors are all cleared
+```
+
+### Internal Flow Summary
+
+```
+User calls addAddress() or update()
+  │
+  ├─ geocoding_enabled = false?
+  │    └─ Clear all coordinate data → DONE
+  │
+  ├─ latitude + longitude provided?
+  │    ├─ Set trustProvidedCoordinates = true
+  │    ├─ Store Point coordinates (PostgreSQL)
+  │    ├─ Set geocoded_at timestamp
+  │    └─ Fire AddressGeocoded event → DONE (no API call)
+  │
+  └─ No coordinates provided?
+       ├─ Address fields changed? → Clear old coords, dispatch GeocodeAddress job
+       ├─ geocoding_enabled just turned on? → Dispatch GeocodeAddress job
+       └─ Nothing relevant changed? → DONE (keep existing coords)
+```
 
 ## Geocoding Providers
 
