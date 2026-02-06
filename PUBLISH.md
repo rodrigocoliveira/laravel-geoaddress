@@ -13,42 +13,39 @@
 
 Follow [Semantic Versioning](https://semver.org/) — format: `vMAJOR.MINOR.PATCH`
 
-| Type      | When to use                                                        | Example           |
+| Type      | When to use                                                        | Example            |
 |-----------|--------------------------------------------------------------------|--------------------|
 | **Patch** | Bug fixes, typos, internal changes (no breaking, no new features)  | `v1.0.0` → `v1.0.1` |
 | **Minor** | New features that are backwards-compatible                         | `v1.0.0` → `v1.1.0` |
 | **Major** | Breaking changes (renamed methods, removed features, changed API)  | `v1.0.0` → `v2.0.0` |
 
-### 2. Update CHANGELOG (optional but recommended)
-
-Document what changed in this release.
-
-### 3. Commit any pending changes
+### 2. Commit any pending changes
 
 ```bash
 git add -A
 git commit -m "Prepare release vX.Y.Z"
 ```
 
-### 4. Create and push the tag
+### 3. Create and push the tag
 
 ```bash
-# Patch release
-git tag v1.0.1
-
-# Minor release
-git tag v1.1.0
-
-# Major release
-git tag v2.0.0
-
-# Push the tag
-git push origin --tags
+git tag vX.Y.Z
+git push origin main --tags
 ```
 
-### 5. Verify
+### 4. Create a GitHub Release
 
-- Check [packagist.org/packages/multek/laravel-geoaddress](https://packagist.org/packages/multek/laravel-geoaddress) — the new version should appear within a few minutes (instant if webhook is configured).
+Requires `gh` CLI installed and authenticated (`gh auth login`).
+
+```bash
+gh release create vX.Y.Z --title "vX.Y.Z" --generate-notes
+```
+
+The `--generate-notes` flag auto-generates release notes from commits since the last tag.
+
+### 5. Verify on Packagist
+
+Check [packagist.org/packages/multek/laravel-geoaddress](https://packagist.org/packages/multek/laravel-geoaddress) — the new version should appear instantly (webhook is configured).
 
 ## Installing in Laravel Apps
 
@@ -69,10 +66,24 @@ composer update multek/laravel-geoaddress
 # See all existing tags
 git tag
 
+# See latest tag
+git describe --tags --abbrev=0
+
 # Delete a tag locally + remote (if you tagged wrong)
 git tag -d vX.Y.Z
 git push origin :refs/tags/vX.Y.Z
-
-# See latest tag
-git describe --tags --abbrev=0
 ```
+
+## Claude Code — Release Commands
+
+Ask Claude Code to handle the release process:
+
+- `"Create a patch release"` — commits pending changes, bumps patch (e.g. v1.0.1 → v1.0.2), creates tag, and pushes
+- `"Create a minor release"` — same but bumps minor (e.g. v1.0.2 → v1.1.0)
+- `"Create a major release"` — same but bumps major (e.g. v1.1.0 → v2.0.0)
+
+Claude Code will:
+1. Check the latest tag to determine the next version
+2. Commit any pending changes
+3. Create and push the git tag
+4. Create a GitHub Release with auto-generated notes via `gh release create`
