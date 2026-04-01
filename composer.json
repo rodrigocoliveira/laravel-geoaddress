@@ -5,19 +5,19 @@
     "license": "MIT",
     "authors": [
         {
-            "name": "Multek",
-            "email": "dev@multek.com"
+            "name": "Multek"
+            
         }
     ],
     "require": {
         "php": "^8.2",
-        "illuminate/contracts": "^11.0|^12.0",
-        "illuminate/support": "^11.0|^12.0",
+        "illuminate/contracts": "^11.0|^12.0|^13.0",
+        "illuminate/support": "^11.0|^12.0|^13.0",
         "matanyadaev/laravel-eloquent-spatial": "^4.0"
     },
     "require-dev": {
-        "orchestra/testbench": "^9.0|^10.0",
-        "pestphp/pest": "^3.0",
+        "orchestra/testbench": "^9.0|^10.0|^11.0",
+        "pestphp/pest": "^3.0|^4.0",
         "spatie/geocoder": "^3.0"
     },
     "suggest": {
