@@ -66,8 +66,11 @@ GEOADDRESS_PROVIDER=google
 # Fallback Provider (optional) - used if primary fails
 GEOADDRESS_FALLBACK_PROVIDER=nominatim
 
-# Google Maps (if using google provider)
+# Google Maps (if using google provider - requires spatie/geocoder)
 GOOGLE_MAPS_API_KEY=your-api-key-here
+GOOGLE_MAPS_LANGUAGE=pt-BR   # optional
+GOOGLE_MAPS_REGION=br        # optional
+GOOGLE_MAPS_COUNTRY=BR       # optional
 
 # Nominatim (if using nominatim provider - optional custom URL)
 NOMINATIM_URL=https://nominatim.openstreetmap.org
@@ -273,6 +276,18 @@ User calls addAddress() or update()
 | **Google Maps** | Most accurate, great for Brazil | Requires API key, costs money |
 | **Nominatim** | Free, no API key needed | Less accurate, rate limited (1 req/sec) |
 | **Mapbox** | Good accuracy, generous free tier | Requires access token |
+
+### Google Maps Provider
+
+The Google provider (the default) requires `spatie/geocoder`, which is not installed automatically:
+
+```bash
+composer require spatie/geocoder
+```
+
+If it's missing, resolving the `google` provider throws a `GeocoderNotAvailableException` that names the missing package, and the `GeocodeAddress` job's exception includes that error.
+
+The provider reads its settings from `geoaddress.google.*` (`GOOGLE_MAPS_API_KEY`, `GOOGLE_MAPS_LANGUAGE`, `GOOGLE_MAPS_REGION`, `GOOGLE_MAPS_COUNTRY`). If a value is empty there, it falls back to spatie's own `config/geocoder.php` (for example `GOOGLE_MAPS_GEOCODING_API_KEY`).
 
 ### Fallback Provider
 

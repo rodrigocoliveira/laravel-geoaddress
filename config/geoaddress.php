@@ -78,7 +78,10 @@ return [
     |--------------------------------------------------------------------------
     |
     | Configuration for Google Maps Geocoding API.
+    | Requires the spatie/geocoder package: composer require spatie/geocoder
     | Get your API key from: https://console.cloud.google.com/
+    |
+    | Empty values fall back to spatie's config/geocoder.php, if present.
     |
     */
     'google' => [
