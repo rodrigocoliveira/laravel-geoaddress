@@ -133,3 +133,52 @@ test('google geocoder returns null when the api returns an error', function () {
 
     expect((new GoogleMapsGeocoderWithMockClient)->geocode(makeGoogleTestAddress()))->toBeNull();
 });
+
+function googleResultWith(array $overrides = [], array $components = []): Response
+{
+    return googleResponse([
+        'status' => 'OK',
+        'results' => [array_merge([
+            'geometry' => [
+                'location' => ['lat' => -23.5613, 'lng' => -46.6565],
+                'location_type' => 'ROOFTOP',
+                'viewport' => [],
+            ],
+            'formatted_address' => 'Av. Paulista, 1578',
+            'address_components' => $components,
+            'place_id' => 'abc',
+            'types' => [],
+        ], $overrides)],
+    ]);
+}
+
+function postalCodeComponent(string $value, string $type = 'postal_code'): array
+{
+    return ['long_name' => $value, 'short_name' => $value, 'types' => [$type]];
+}
+
+test('google geocoder returns the postal code of a precise match, formatted as a CEP', function () {
+    config(['geoaddress.google.key' => 'key']);
+
+    GoogleMapsGeocoderWithMockClient::$responses = [googleResultWith([], [postalCodeComponent('01310200')])];
+
+    expect((new GoogleMapsGeocoderWithMockClient)->geocode(makeGoogleTestAddress()))
+        ->toBe(['lat' => -23.5613, 'lng' => -46.6565, 'postal_code' => '01310-200']);
+});
+
+test('google geocoder omits the postal code of an imprecise match', function (array $overrides, array $components) {
+    config(['geoaddress.google.key' => 'key']);
+
+    GoogleMapsGeocoderWithMockClient::$responses = [googleResultWith($overrides, $components)];
+
+    expect((new GoogleMapsGeocoderWithMockClient)->geocode(makeGoogleTestAddress()))
+        ->toBe(['lat' => -23.5613, 'lng' => -46.6565]);
+})->with([
+    'approximate (city centroid)' => [
+        ['geometry' => ['location' => ['lat' => -23.5613, 'lng' => -46.6565], 'location_type' => 'APPROXIMATE', 'viewport' => []]],
+        [postalCodeComponent('01000-000')],
+    ],
+    'partial match' => [['partial_match' => true], [postalCodeComponent('01310-200')]],
+    'prefix only' => [[], [postalCodeComponent('01310', 'postal_code_prefix')]],
+    'incomplete CEP' => [[], [postalCodeComponent('01310')]],
+]);

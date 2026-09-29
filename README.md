@@ -72,6 +72,9 @@ GOOGLE_MAPS_LANGUAGE=pt-BR   # optional
 GOOGLE_MAPS_REGION=br        # optional
 GOOGLE_MAPS_COUNTRY=BR       # optional
 
+# Store the provider's postal code on addresses saved without one (optional)
+GEOADDRESS_FILL_MISSING_POSTAL_CODE=true
+
 # Nominatim (if using nominatim provider - optional custom URL)
 NOMINATIM_URL=https://nominatim.openstreetmap.org
 NOMINATIM_USER_AGENT=YourAppName
@@ -288,6 +291,20 @@ composer require spatie/geocoder
 If it's missing, resolving the `google` provider throws a `GeocoderNotAvailableException` that names the missing package, and the `GeocodeAddress` job's exception includes that error.
 
 The provider reads its settings from `geoaddress.google.*` (`GOOGLE_MAPS_API_KEY`, `GOOGLE_MAPS_LANGUAGE`, `GOOGLE_MAPS_REGION`, `GOOGLE_MAPS_COUNTRY`). If a value is empty there, it falls back to spatie's own `config/geocoder.php` (for example `GOOGLE_MAPS_GEOCODING_API_KEY`).
+
+### Filling Missing Postal Codes
+
+Users often don't know their postal code. With `GEOADDRESS_FILL_MISSING_POSTAL_CODE=true`, a successful geocode stores the provider's postal code on addresses saved without one. A postal code already on the address is never overwritten.
+
+Only the Google provider returns a postal code, and only for a precise match: `location_type` `ROOFTOP` or `RANGE_INTERPOLATED`, not a `partial_match`, and a full `postal_code` component (a `postal_code_prefix` is ignored). Brazilian CEPs must have all 8 digits and are stored as `00000-000`. When Google only finds the city or neighbourhood, the postal code stays empty rather than getting a generic one.
+
+Addresses geocoded before the option was enabled are not geocoded again. Backfill them with:
+
+```bash
+php artisan geoaddress:backfill-postal-codes --sleep=100
+```
+
+It re-asks the provider (`--provider`, defaults to `geoaddress.provider`) for geocoded addresses without a postal code and stores only the postal code. `--limit` caps how many addresses are processed.
 
 ### Fallback Provider
 

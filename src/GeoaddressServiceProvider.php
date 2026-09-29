@@ -3,6 +3,7 @@
 namespace Multek\LaravelGeoaddress;
 
 use Illuminate\Support\ServiceProvider;
+use Multek\LaravelGeoaddress\Console\Commands\BackfillPostalCodesCommand;
 use Multek\LaravelGeoaddress\Console\Commands\InstallCommand;
 use Multek\LaravelGeoaddress\Contracts\GeocoderInterface;
 use Multek\LaravelGeoaddress\Models\Address;
@@ -55,6 +56,7 @@ class GeoaddressServiceProvider extends ServiceProvider
         if ($this->app->runningInConsole()) {
             $this->commands([
                 InstallCommand::class,
+                BackfillPostalCodesCommand::class,
             ]);
         }
     }
