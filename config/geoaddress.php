@@ -38,6 +38,19 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Fill Missing Postal Code
+    |--------------------------------------------------------------------------
+    |
+    | When enabled, a successful geocode stores the provider's postal code on
+    | addresses saved without one. An existing postal code is never
+    | overwritten. Only the Google provider returns one, and only for a
+    | precise (street-level, non-partial) match.
+    |
+    */
+    'fill_missing_postal_code' => env('GEOADDRESS_FILL_MISSING_POSTAL_CODE', false),
+
+    /*
+    |--------------------------------------------------------------------------
     | Request Timeout
     |--------------------------------------------------------------------------
     |

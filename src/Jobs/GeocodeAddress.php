@@ -114,12 +114,7 @@ class GeocodeAddress implements ShouldQueue
 
         if ($coordinates) {
             // Geocoding successful - update without triggering observer
-            $address->updateQuietly([
-                'coordinates' => new Point($coordinates['lat'], $coordinates['lng'], 4326),
-                'geocoded_at' => now(),
-                'geocoding_failed_at' => null,
-                'geocoding_error' => null,
-            ]);
+            $address->updateQuietly($this->geocodedAttributes($address, $coordinates));
 
             Log::info("Successfully geocoded address {$this->addressId}: {$address->formatted_address}");
 
@@ -143,6 +138,31 @@ class GeocodeAddress implements ShouldQueue
                 $this->providerErrors ? end($this->providerErrors) : null
             );
         }
+    }
+
+    /**
+     * Attributes to store after a successful geocode.
+     *
+     * The provider's postal code is only written when the address has none
+     * and `geoaddress.fill_missing_postal_code` is on — a postal code the
+     * user typed is never overwritten.
+     *
+     * @param  array{lat: float, lng: float, postal_code?: string}  $result
+     */
+    protected function geocodedAttributes(Address $address, array $result): array
+    {
+        $attributes = [
+            'coordinates' => new Point($result['lat'], $result['lng'], 4326),
+            'geocoded_at' => now(),
+            'geocoding_failed_at' => null,
+            'geocoding_error' => null,
+        ];
+
+        if (config('geoaddress.fill_missing_postal_code') && blank($address->postal_code) && ! empty($result['postal_code'])) {
+            $attributes['postal_code'] = $result['postal_code'];
+        }
+
+        return $attributes;
     }
 
     /**
