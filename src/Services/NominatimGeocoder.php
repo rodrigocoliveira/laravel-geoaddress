@@ -72,7 +72,7 @@ class NominatimGeocoder implements GeocoderInterface
                 'lat' => (float) $result['lat'],
                 'lng' => (float) $result['lon'],
             ];
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             Log::error('Nominatim geocoding failed', [
                 'address_id' => $address->id,
                 'address' => $address->formatted_address,

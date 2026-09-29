@@ -73,7 +73,7 @@ class MapboxGeocoder implements GeocoderInterface
                 'lat' => (float) $coordinates[1],
                 'lng' => (float) $coordinates[0],
             ];
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             Log::error('Mapbox geocoding failed', [
                 'address_id' => $address->id,
                 'address' => $address->formatted_address,

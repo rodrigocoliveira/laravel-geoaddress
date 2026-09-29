@@ -47,6 +47,13 @@ class GeocodeAddress implements ShouldQueue
     public bool $deleteWhenMissingModels = true;
 
     /**
+     * Exceptions thrown by providers during this attempt, keyed by provider name.
+     *
+     * @var array<string, \Throwable>
+     */
+    protected array $providerErrors = [];
+
+    /**
      * Create a new job instance.
      */
     public function __construct(
@@ -91,6 +98,8 @@ class GeocodeAddress implements ShouldQueue
             return;
         }
 
+        $this->providerErrors = [];
+
         // Try primary provider
         $primaryProvider = config('geoaddress.provider', 'google');
         $fallbackProvider = config('geoaddress.fallback_provider');
@@ -118,15 +127,21 @@ class GeocodeAddress implements ShouldQueue
             AddressGeocoded::dispatch($address->fresh());
         } else {
             // Both providers failed
+            $reason = $this->describeProviderErrors();
+
             $address->updateQuietly([
                 'geocoding_failed_at' => now(),
-                'geocoding_error' => 'Unable to geocode address with any provider',
+                'geocoding_error' => $reason ?? 'Unable to geocode address with any provider',
             ]);
 
             Log::warning("Failed to geocode address {$this->addressId} with all providers: {$address->formatted_address}");
 
-            // Throw exception to trigger retry
-            throw new \Exception("Geocoding failed for address {$this->addressId}");
+            // Throw exception to trigger retry, chaining the underlying provider error
+            throw new \Exception(
+                "Geocoding failed for address {$this->addressId}".($reason ? ": {$reason}" : ''),
+                0,
+                $this->providerErrors ? end($this->providerErrors) : null
+            );
         }
     }
 
@@ -140,10 +155,26 @@ class GeocodeAddress implements ShouldQueue
 
             return $geocoder->geocode($address);
         } catch (\Throwable $e) {
+            $this->providerErrors[$provider] = $e;
+
             Log::warning("Geocoder {$provider} threw exception for address {$this->addressId}: {$e->getMessage()}");
 
             return null;
         }
+    }
+
+    /**
+     * Summarize exceptions thrown by providers, e.g. "[google] message; [nominatim] message".
+     */
+    protected function describeProviderErrors(): ?string
+    {
+        if (! $this->providerErrors) {
+            return null;
+        }
+
+        return collect($this->providerErrors)
+            ->map(fn (\Throwable $e, string $provider) => "[{$provider}] {$e->getMessage()}")
+            ->implode('; ');
     }
 
     /**
