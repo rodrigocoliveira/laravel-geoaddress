@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.3.0 - Unreleased
+## 1.3.0 - 2026-10-28
 
 Geocoding failures are no longer invisible ([#5](https://github.com/rodrigocoliveira/laravel-geoaddress/issues/5)).
 
