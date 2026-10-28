@@ -13,6 +13,10 @@ use Multek\LaravelGeoaddress\Services\GeocoderFactory;
  * runs; addresses geocoded before `fill_missing_postal_code` was enabled are
  * never geocoded again. This re-asks the provider for those addresses and
  * stores only the postal code — coordinates are left untouched.
+ *
+ * Like the job, it records what the provider answered (or threw) in
+ * `metadata['geocoding']`, so an address left without a postal code is
+ * explainable afterwards.
  */
 class BackfillPostalCodesCommand extends Command
 {
@@ -25,7 +29,8 @@ class BackfillPostalCodesCommand extends Command
 
     public function handle(GeocoderFactory $factory): int
     {
-        $geocoder = $factory->make($this->option('provider') ?: config('geoaddress.provider', 'google'));
+        $provider = $this->option('provider') ?: config('geoaddress.provider', 'google');
+        $geocoder = $factory->make($provider);
         $sleep = (int) $this->option('sleep');
 
         $addresses = Address::query()
@@ -39,14 +44,27 @@ class BackfillPostalCodesCommand extends Command
         $filled = 0;
 
         foreach ($addresses as $address) {
-            $postalCode = $geocoder->geocode($address)['postal_code'] ?? null;
+            $result = null;
+            $error = null;
+
+            try {
+                $result = $geocoder->geocode($address);
+            } catch (\Throwable $e) {
+                $error = $e->getMessage();
+            }
+
+            $postalCode = $result['postal_code'] ?? null;
+
+            $address->updateQuietly(array_filter([
+                'postal_code' => $postalCode,
+                'metadata' => $address->metadataWithGeocoding($provider, $result, (bool) $postalCode, $error),
+            ]));
 
             if ($postalCode) {
-                $address->updateQuietly(['postal_code' => $postalCode]);
                 $filled++;
                 $this->line("#{$address->id} {$postalCode}");
             } else {
-                $this->line("#{$address->id} no precise postal code");
+                $this->line("#{$address->id} ".($error ?? 'no precise postal code'));
             }
 
             if ($sleep > 0) {

@@ -290,6 +290,8 @@ composer require spatie/geocoder
 
 If it's missing, resolving the `google` provider throws a `GeocoderNotAvailableException` that names the missing package, and the `GeocodeAddress` job's exception includes that error.
 
+Provider errors are never swallowed: a Google error status (`REQUEST_DENIED`, `OVER_QUERY_LIMIT`, ...) or a connection failure propagates as spatie's `CouldNotGeocode`, and an address Google cannot find throws a `GeocodingFailedException` naming the status and the query. The job stores that message in `geocoding_error` (see [Diagnosing a geocode](#diagnosing-a-geocode)).
+
 The provider reads its settings from `geoaddress.google.*` (`GOOGLE_MAPS_API_KEY`, `GOOGLE_MAPS_LANGUAGE`, `GOOGLE_MAPS_REGION`, `GOOGLE_MAPS_COUNTRY`). If a value is empty there, it falls back to spatie's own `config/geocoder.php` (for example `GOOGLE_MAPS_GEOCODING_API_KEY`).
 
 ### Filling Missing Postal Codes
@@ -304,7 +306,39 @@ Addresses geocoded before the option was enabled are not geocoded again. Backfil
 php artisan geoaddress:backfill-postal-codes --sleep=100
 ```
 
-It re-asks the provider (`--provider`, defaults to `geoaddress.provider`) for geocoded addresses without a postal code and stores only the postal code. `--limit` caps how many addresses are processed.
+It re-asks the provider (`--provider`, defaults to `geoaddress.provider`) for geocoded addresses without a postal code and stores only the postal code. `--limit` caps how many addresses are processed. Like the job, it records what the provider answered (or threw) in `metadata.geocoding`, and a provider error on one address does not stop the run.
+
+### Diagnosing a geocode
+
+Every geocode, successful or not, leaves a `geocoding` block in the address `metadata` (other keys are kept). It is the first place to look when an address has no coordinates or no postal code:
+
+```json
+{
+  "geocoding": {
+    "provider": "google",
+    "query": "Rua Augusta, 1500, Consolacao, Sao Paulo - SP, BR",
+    "accuracy": "GEOMETRIC_CENTER",
+    "partial_match": true,
+    "place_id": "ChIJ...",
+    "formatted_address": "R. Augusta, Consolação, São Paulo - SP, Brasil",
+    "postal_code_candidate": "01304-001",
+    "postal_code_applied": false,
+    "error": null,
+    "at": "2026-10-28T14:03:11+00:00"
+  }
+}
+```
+
+`accuracy` is Google's `location_type`; `postal_code_candidate` is the raw postal code of the result even when the [precision rules](#filling-missing-postal-codes) rejected it, and `postal_code_applied` tells whether it was written. A block like the one above means Google only found the street, not the number — the address itself needs fixing, not the provider.
+
+When every provider fails, `geocoding_error` holds the real cause, prefixed by the provider that produced it:
+
+```
+[google] The [google] geocoding provider returned ZERO_RESULTS for "Rua Inexistente, 10, Sao Paulo - SP, BR"
+[google] Geocoding failed because `The provided API key is invalid.`; [nominatim] Nominatim geocoding returned no results
+```
+
+The job only writes `geocoding_failed_at` / `geocoding_error` on its last attempt (`$tries`, default 3). Earlier attempts rethrow without touching the address, so the queue retries after `$backoff`, and the final failure reaches `failed_jobs` and your error tracker with the full exception. An address that failed is not retried by a new dispatch for 24 hours.
 
 ### Fallback Provider
 

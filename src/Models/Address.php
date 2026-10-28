@@ -218,6 +218,33 @@ class Address extends Model
     }
 
     /**
+     * Metadata with a `geocoding` diagnostic block merged in; other keys kept.
+     *
+     * Written by the GeocodeAddress job and the backfill command on every
+     * geocode, successful or not, so an address without coordinates or CEP
+     * can be explained from the database alone.
+     *
+     * @param  array|null  $result  what the provider returned (see GeocoderInterface), null on failure
+     */
+    public function metadataWithGeocoding(string $provider, ?array $result, bool $postalCodeApplied, ?string $error = null): array
+    {
+        return array_merge($this->metadata ?? [], [
+            'geocoding' => [
+                'provider' => $result['provider'] ?? $provider,
+                'query' => $result['query'] ?? $this->formatted_address,
+                'accuracy' => $result['accuracy'] ?? null,
+                'partial_match' => $result['partial_match'] ?? null,
+                'place_id' => $result['place_id'] ?? null,
+                'formatted_address' => $result['formatted_address'] ?? null,
+                'postal_code_candidate' => $result['postal_code_candidate'] ?? null,
+                'postal_code_applied' => $postalCodeApplied,
+                'error' => $error,
+                'at' => now()->toIso8601String(),
+            ],
+        ]);
+    }
+
+    /**
      * Get formatted address as string (Brazilian format).
      */
     public function getFormattedAddressAttribute(): string

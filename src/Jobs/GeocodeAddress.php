@@ -19,6 +19,12 @@ use Multek\LaravelGeoaddress\Services\GeocoderFactory;
  * Asynchronously geocodes an address using the configured geocoding provider.
  * If the primary provider fails, automatically tries the fallback provider.
  *
+ * Every attempt's outcome is persisted: a successful geocode writes what the
+ * provider answered into `metadata['geocoding']`; the final failure writes
+ * the real provider error into `geocoding_error` and the same metadata
+ * block. Intermediate failures leave the address untouched so the queue
+ * actually retries (see handle()).
+ *
  * This job is only dispatched when:
  * - geocoding_enabled = true
  * - No coordinates were provided in the request
@@ -104,40 +110,57 @@ class GeocodeAddress implements ShouldQueue
         $primaryProvider = config('geoaddress.provider', 'google');
         $fallbackProvider = config('geoaddress.fallback_provider');
 
+        $provider = $primaryProvider;
         $coordinates = $this->tryGeocode($factory, $primaryProvider, $address);
 
         // If primary failed and fallback is configured, try fallback
         if (! $coordinates && $fallbackProvider && $fallbackProvider !== $primaryProvider) {
             Log::info("Primary geocoder ({$primaryProvider}) failed for address {$this->addressId}, trying fallback ({$fallbackProvider})");
+            $provider = $fallbackProvider;
             $coordinates = $this->tryGeocode($factory, $fallbackProvider, $address);
         }
 
         if ($coordinates) {
             // Geocoding successful - update without triggering observer
-            $address->updateQuietly($this->geocodedAttributes($address, $coordinates));
+            $address->updateQuietly($this->geocodedAttributes($address, $coordinates, $provider));
 
             Log::info("Successfully geocoded address {$this->addressId}: {$address->formatted_address}");
 
             // Dispatch event
             AddressGeocoded::dispatch($address->fresh());
-        } else {
-            // Both providers failed
-            $reason = $this->describeProviderErrors();
 
-            $address->updateQuietly([
-                'geocoding_failed_at' => now(),
-                'geocoding_error' => $reason ?? 'Unable to geocode address with any provider',
-            ]);
-
-            Log::warning("Failed to geocode address {$this->addressId} with all providers: {$address->formatted_address}");
-
-            // Throw exception to trigger retry, chaining the underlying provider error
-            throw new \Exception(
-                "Geocoding failed for address {$this->addressId}".($reason ? ": {$reason}" : ''),
-                0,
-                $this->providerErrors ? end($this->providerErrors) : null
-            );
+            return;
         }
+
+        // All providers failed
+        $reason = $this->describeProviderErrors() ?? 'Unable to geocode address with any provider';
+
+        $exception = new \Exception(
+            "Geocoding failed for address {$this->addressId}: {$reason}",
+            0,
+            $this->providerErrors ? end($this->providerErrors) : null
+        );
+
+        // Not the last attempt: rethrow without touching the address so the
+        // queue retries after $backoff. Writing geocoding_failed_at here would
+        // make the next attempt hit the "recently failed" guard above and
+        // return normally — the job would never retry, never reach failed()
+        // and never land in failed_jobs.
+        if ($this->attempts() < $this->tries) {
+            Log::warning("Geocoding attempt {$this->attempts()} of {$this->tries} failed for address {$this->addressId}, will retry: {$reason}");
+
+            throw $exception;
+        }
+
+        $address->updateQuietly([
+            'geocoding_failed_at' => now(),
+            'geocoding_error' => $reason,
+            'metadata' => $address->metadataWithGeocoding($provider, null, false, $reason),
+        ]);
+
+        Log::warning("Failed to geocode address {$this->addressId} with all providers: {$address->formatted_address}");
+
+        throw $exception;
     }
 
     /**
@@ -147,9 +170,11 @@ class GeocodeAddress implements ShouldQueue
      * and `geoaddress.fill_missing_postal_code` is on — a postal code the
      * user typed is never overwritten.
      *
-     * @param  array{lat: float, lng: float, postal_code?: string}  $result
+     * The provider's answer is kept in `metadata['geocoding']`.
+     *
+     * @param  array{lat: float, lng: float, postal_code?: string}  $result  see GeocoderInterface for the diagnostic keys
      */
-    protected function geocodedAttributes(Address $address, array $result): array
+    protected function geocodedAttributes(Address $address, array $result, string $provider): array
     {
         $attributes = [
             'coordinates' => new Point($result['lat'], $result['lng'], 4326),
@@ -161,6 +186,8 @@ class GeocodeAddress implements ShouldQueue
         if (config('geoaddress.fill_missing_postal_code') && blank($address->postal_code) && ! empty($result['postal_code'])) {
             $attributes['postal_code'] = $result['postal_code'];
         }
+
+        $attributes['metadata'] = $address->metadataWithGeocoding($provider, $result, isset($attributes['postal_code']));
 
         return $attributes;
     }

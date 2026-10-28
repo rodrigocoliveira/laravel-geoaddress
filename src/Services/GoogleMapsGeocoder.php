@@ -6,7 +6,9 @@ use GuzzleHttp\Client;
 use Illuminate\Support\Facades\Log;
 use Multek\LaravelGeoaddress\Contracts\GeocoderInterface;
 use Multek\LaravelGeoaddress\Exceptions\GeocoderNotAvailableException;
+use Multek\LaravelGeoaddress\Exceptions\GeocodingFailedException;
 use Multek\LaravelGeoaddress\Models\Address;
+use Spatie\Geocoder\Exceptions\CouldNotGeocode;
 use Spatie\Geocoder\Geocoder;
 
 /**
@@ -27,7 +29,20 @@ class GoogleMapsGeocoder implements GeocoderInterface
     /**
      * Geocode an address and return coordinates.
      *
-     * @return array{lat: float, lng: float, postal_code?: string}|null
+     * Besides lat/lng (and the postal code of a precise match) the result
+     * carries what Google answered, so the caller can persist it.
+     *
+     * Errors are not swallowed: a Google error status (REQUEST_DENIED,
+     * OVER_QUERY_LIMIT, ...) or a connection failure propagates as spatie's
+     * CouldNotGeocode, and no result throws GeocodingFailedException. spatie
+     * reports "no results" as a `result_not_found` accuracy with zero
+     * coordinates; Google's status for that is ZERO_RESULTS (every other
+     * status carries an error_message and is thrown by spatie before).
+     *
+     * @return array{lat: float, lng: float, postal_code?: string, provider: string, query: string, accuracy: string, partial_match: bool, place_id?: string, formatted_address?: string, postal_code_candidate?: string}|null
+     *
+     * @throws CouldNotGeocode
+     * @throws GeocodingFailedException
      */
     public function geocode(Address $address): ?array
     {
@@ -39,32 +54,25 @@ class GoogleMapsGeocoder implements GeocoderInterface
             return null;
         }
 
-        try {
-            $result = $this->makeGeocoder($apiKey)->getCoordinatesForAddress($address->formatted_address);
+        $query = $address->formatted_address;
+        $result = $this->makeGeocoder($apiKey)->getCoordinatesForAddress($query);
 
-            if ($result['lat'] !== 0.0 && $result['lng'] !== 0.0) {
-                return array_filter([
-                    'lat' => $result['lat'],
-                    'lng' => $result['lng'],
-                    'postal_code' => $this->precisePostalCode($result, $address),
-                ], fn ($value) => $value !== null);
-            }
-
-            Log::warning('Google Maps geocoding returned zero coordinates', [
-                'address_id' => $address->id,
-                'address' => $address->formatted_address,
-            ]);
-
-            return null;
-        } catch (\Throwable $e) {
-            Log::error('Google Maps geocoding failed', [
-                'address_id' => $address->id,
-                'address' => $address->formatted_address,
-                'error' => $e->getMessage(),
-            ]);
-
-            return null;
+        if ($result['accuracy'] === Geocoder::RESULT_NOT_FOUND || ((float) $result['lat'] === 0.0 && (float) $result['lng'] === 0.0)) {
+            throw GeocodingFailedException::noResults('google', $query);
         }
+
+        return array_filter([
+            'lat' => $result['lat'],
+            'lng' => $result['lng'],
+            'postal_code' => $this->precisePostalCode($result, $address),
+            'provider' => 'google',
+            'query' => $query,
+            'accuracy' => $result['accuracy'],
+            'partial_match' => (bool) ($result['partial_match'] ?? false),
+            'place_id' => $result['place_id'] ?? null,
+            'formatted_address' => $result['formatted_address'] ?? null,
+            'postal_code_candidate' => $this->postalCodeComponent($result),
+        ], fn ($value) => $value !== null);
     }
 
     /**
@@ -81,9 +89,20 @@ class GoogleMapsGeocoder implements GeocoderInterface
             return null;
         }
 
+        $postalCode = $this->postalCodeComponent($result, ['postal_code']);
+
+        return $postalCode === null ? null : $this->normalizePostalCode($postalCode, $address);
+    }
+
+    /**
+     * The raw postal code in the result, precise or not — kept for diagnosis
+     * even when precisePostalCode() rejects it.
+     */
+    protected function postalCodeComponent(array $result, array $types = ['postal_code', 'postal_code_prefix']): ?string
+    {
         foreach ($result['address_components'] ?? [] as $component) {
-            if (in_array('postal_code', (array) ($component->types ?? []), true)) {
-                return $this->normalizePostalCode((string) $component->long_name, $address);
+            if (array_intersect($types, (array) ($component->types ?? []))) {
+                return (string) $component->long_name;
             }
         }
 
