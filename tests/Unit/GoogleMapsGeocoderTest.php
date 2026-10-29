@@ -7,9 +7,11 @@ use GuzzleHttp\Middleware;
 use GuzzleHttp\Psr7\Response;
 use Illuminate\Support\Facades\Queue;
 use Multek\LaravelGeoaddress\Exceptions\GeocoderNotAvailableException;
+use Multek\LaravelGeoaddress\Exceptions\GeocodingFailedException;
 use Multek\LaravelGeoaddress\Services\GeocoderFactory;
 use Multek\LaravelGeoaddress\Services\GoogleMapsGeocoder;
 use Multek\LaravelGeoaddress\Tests\TestModel;
+use Spatie\Geocoder\Exceptions\CouldNotGeocode;
 
 class GoogleMapsGeocoderWithoutSpatie extends GoogleMapsGeocoder
 {
@@ -89,7 +91,7 @@ test('google geocoder uses geoaddress.google config', function () {
 
     $result = (new GoogleMapsGeocoderWithMockClient)->geocode(makeGoogleTestAddress());
 
-    expect($result)->toBe(['lat' => -23.5613, 'lng' => -46.6565]);
+    expect($result)->toMatchArray(['lat' => -23.5613, 'lng' => -46.6565])->not->toHaveKey('postal_code');
 
     parse_str(GoogleMapsGeocoderWithMockClient::$history[0]['request']->getUri()->getQuery(), $query);
 
@@ -106,7 +108,7 @@ test('google geocoder falls back to spatie geocoder config key', function () {
 
     GoogleMapsGeocoderWithMockClient::$responses = [googleResponse(['status' => 'ZERO_RESULTS', 'results' => []])];
 
-    (new GoogleMapsGeocoderWithMockClient)->geocode(makeGoogleTestAddress());
+    rescue(fn () => (new GoogleMapsGeocoderWithMockClient)->geocode(makeGoogleTestAddress()), report: false);
 
     parse_str(GoogleMapsGeocoderWithMockClient::$history[0]['request']->getUri()->getQuery(), $query);
 
@@ -122,7 +124,7 @@ test('google geocoder returns null without calling the api when no key is config
     expect(GoogleMapsGeocoderWithMockClient::$history)->toBeEmpty();
 });
 
-test('google geocoder returns null when the api returns an error', function () {
+test('google geocoder lets the api error through with its message', function () {
     config(['geoaddress.google.key' => 'bad-key']);
 
     GoogleMapsGeocoderWithMockClient::$responses = [googleResponse([
@@ -131,7 +133,19 @@ test('google geocoder returns null when the api returns an error', function () {
         'results' => [],
     ])];
 
-    expect((new GoogleMapsGeocoderWithMockClient)->geocode(makeGoogleTestAddress()))->toBeNull();
+    expect(fn () => (new GoogleMapsGeocoderWithMockClient)->geocode(makeGoogleTestAddress()))
+        ->toThrow(CouldNotGeocode::class, 'The provided API key is invalid.');
+});
+
+test('google geocoder throws with the status and the query when there are no results', function () {
+    config(['geoaddress.google.key' => 'key']);
+
+    GoogleMapsGeocoderWithMockClient::$responses = [googleResponse(['status' => 'ZERO_RESULTS', 'results' => []])];
+
+    $address = makeGoogleTestAddress();
+
+    expect(fn () => (new GoogleMapsGeocoderWithMockClient)->geocode($address))
+        ->toThrow(GeocodingFailedException::class, "[google] geocoding provider returned ZERO_RESULTS for \"{$address->formatted_address}\"");
 });
 
 function googleResultWith(array $overrides = [], array $components = []): Response
@@ -162,23 +176,38 @@ test('google geocoder returns the postal code of a precise match, formatted as a
 
     GoogleMapsGeocoderWithMockClient::$responses = [googleResultWith([], [postalCodeComponent('01310200')])];
 
-    expect((new GoogleMapsGeocoderWithMockClient)->geocode(makeGoogleTestAddress()))
-        ->toBe(['lat' => -23.5613, 'lng' => -46.6565, 'postal_code' => '01310-200']);
+    $address = makeGoogleTestAddress();
+
+    expect((new GoogleMapsGeocoderWithMockClient)->geocode($address))->toBe([
+        'lat' => -23.5613,
+        'lng' => -46.6565,
+        'postal_code' => '01310-200',
+        'provider' => 'google',
+        'query' => $address->formatted_address,
+        'accuracy' => 'ROOFTOP',
+        'partial_match' => false,
+        'place_id' => 'abc',
+        'formatted_address' => 'Av. Paulista, 1578',
+        'postal_code_candidate' => '01310200',
+    ]);
 });
 
-test('google geocoder omits the postal code of an imprecise match', function (array $overrides, array $components) {
+test('google geocoder omits the postal code of an imprecise match but keeps it as a candidate', function (array $overrides, array $components, string $candidate) {
     config(['geoaddress.google.key' => 'key']);
 
     GoogleMapsGeocoderWithMockClient::$responses = [googleResultWith($overrides, $components)];
 
-    expect((new GoogleMapsGeocoderWithMockClient)->geocode(makeGoogleTestAddress()))
-        ->toBe(['lat' => -23.5613, 'lng' => -46.6565]);
+    $result = (new GoogleMapsGeocoderWithMockClient)->geocode(makeGoogleTestAddress());
+
+    expect($result)->toMatchArray(['lat' => -23.5613, 'lng' => -46.6565, 'postal_code_candidate' => $candidate])
+        ->not->toHaveKey('postal_code');
 })->with([
     'approximate (city centroid)' => [
         ['geometry' => ['location' => ['lat' => -23.5613, 'lng' => -46.6565], 'location_type' => 'APPROXIMATE', 'viewport' => []]],
         [postalCodeComponent('01000-000')],
+        '01000-000',
     ],
-    'partial match' => [['partial_match' => true], [postalCodeComponent('01310-200')]],
-    'prefix only' => [[], [postalCodeComponent('01310', 'postal_code_prefix')]],
-    'incomplete CEP' => [[], [postalCodeComponent('01310')]],
+    'partial match' => [['partial_match' => true], [postalCodeComponent('01310-200')], '01310-200'],
+    'prefix only' => [[], [postalCodeComponent('01310', 'postal_code_prefix')], '01310'],
+    'incomplete CEP' => [[], [postalCodeComponent('01310')], '01310'],
 ]);
